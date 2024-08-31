@@ -54,6 +54,7 @@ func (cs *ChatServer) HandleConnection(conn net.Conn) {
 
 	mode = strings.TrimSpace(mode)
 	log.Println("User", username, "entered mode:", mode)
+
 	switch mode {
 	case "global":
 		cs.handleGlobalChat(conn, reader, username)
@@ -75,7 +76,14 @@ func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader, user
 			cs.RemoveClient(conn, username)
 			return
 		}
-		formattedMessage := utils.FormatChatMessage(username, strings.TrimSpace(message))
-		cs.BroadcastMessage(formattedMessage, conn)
+
+		trimmedMessage := strings.TrimSpace(message)
+		if strings.HasPrefix(trimmedMessage, "/") {
+			// Handle command
+			cs.HandleCommand(conn, trimmedMessage[1:])
+		} else {
+			formattedMessage := utils.FormatChatMessage(username, strings.TrimSpace(message))
+			cs.BroadcastMessage(formattedMessage, conn)
+		}
 	}
 }

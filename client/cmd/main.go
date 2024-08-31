@@ -93,12 +93,13 @@ func listenForMessages(conn net.Conn) {
 	reader := bufio.NewReader(conn)
 	for {
 		message, err := reader.ReadString('\n')
-		if err != nil {
-			log.Fatalln("Server disconnected.")
-		}
 
 		// Clear the current input prompt
 		fmt.Print("\r\033[K") // This clears the line
+
+		if err != nil {
+			os.Exit(0)
+		}
 
 		// Print the new message
 		fmt.Print(FgGreen + Bold + message + Reset)
