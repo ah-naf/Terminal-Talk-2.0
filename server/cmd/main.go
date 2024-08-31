@@ -10,7 +10,15 @@ import (
 
 var (
 	globalClients = make(map[net.Conn]string)
-	usernames = make(map[string]bool)
+	usernames     = make(map[string]bool)
+)
+
+// ANSI escape codes for text formatting
+const (
+	Reset   = "\033[0m"
+	Bold    = "\033[1m"
+	FgGreen = "\033[32m"
+	FgCyan  = "\033[36m"
 )
 
 func main() {
@@ -23,7 +31,6 @@ func main() {
 
 	for {
 		conn, err := listener.Accept()
-
 		if err != nil {
 			log.Println("Error accepting connection:", err.Error())
 			continue
@@ -39,12 +46,11 @@ func handleConnection(conn net.Conn) {
 
 	var username string
 	for {
-		// Get the username
 		username, _ = reader.ReadString('\n')
 		username = strings.TrimSpace(username)
 
 		if _, exists := usernames[username]; exists {
-			conn.Write([]byte("Username already taken. Please enter a different username:\n"))
+			conn.Write([]byte("Username already taken. Please enter a different username\n"))
 		} else {
 			usernames[username] = true
 			conn.Write([]byte(fmt.Sprintf("Your username is %s\n", username)))
@@ -52,7 +58,6 @@ func handleConnection(conn net.Conn) {
 		}
 	}
 
-	// Get the chat mode
 	mode, err := reader.ReadString('\n')
 	if err != nil {
 		log.Println("Client disconnected.")
@@ -71,14 +76,15 @@ func handleConnection(conn net.Conn) {
 
 func handleGlobalChat(conn net.Conn, reader *bufio.Reader, username string) {
 	globalClients[conn] = username
-	// log.Println(username, "joined global chat")
-	broadcastMessage(username + " joined the chat", conn)
+
+	coolJoinMessage := fmt.Sprintf(FgCyan + Bold + "%s has entered the chat! 🎉" + Reset, username)
+	broadcastMessage(coolJoinMessage, conn)
 
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			log.Println(username, "disconnected")
-			broadcastMessage(username + " left the chat", conn)
+			broadcastMessage(FgCyan+Bold+username+" left the chat!"+Reset, conn)
 			removeClient(conn, username)
 			return
 		}
