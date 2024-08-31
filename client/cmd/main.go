@@ -32,7 +32,6 @@ func main() {
 	// Display cool welcome message
 	fmt.Println(ClearScreen) // Clear the screen
 	fmt.Println(Bold + FgCyan + "Welcome to the Cool Chat Server!" + Reset)
-	fmt.Println(FgGreen + "Connecting..." + Reset)
 
 	conn, err := net.Dial("tcp", "localhost:8000")
 	if err != nil {

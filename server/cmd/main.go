@@ -6,22 +6,112 @@ import (
 	"log"
 	"net"
 	"strings"
+	"sync"
 )
 
-var (
-	globalClients = make(map[net.Conn]string)
-	usernames     = make(map[string]bool)
-)
+// ChatServer struct encapsulates the shared resources and the mutex
+type ChatServer struct {
+	mu            sync.Mutex
+	globalClients map[net.Conn]string
+	usernames     map[string]bool
+}
 
-// ANSI escape codes for text formatting
-const (
-	Reset   = "\033[0m"
-	Bold    = "\033[1m"
-	FgGreen = "\033[32m"
-	FgCyan  = "\033[36m"
-)
+// NewChatServer creates a new instance of ChatServer
+func NewChatServer() *ChatServer {
+	return &ChatServer{
+		globalClients: make(map[net.Conn]string),
+		usernames:     make(map[string]bool),
+	}
+}
+
+// AddClient safely adds a client to the globalClients map
+func (cs *ChatServer) AddClient(conn net.Conn, username string) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	cs.globalClients[conn] = username
+	cs.usernames[username] = true
+}
+
+// RemoveClient safely removes a client from the globalClients map
+func (cs *ChatServer) RemoveClient(conn net.Conn, username string) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+	delete(cs.globalClients, conn)
+	delete(cs.usernames, username)
+}
+
+// BroadcastMessage safely sends a message to all connected clients except the sender
+func (cs *ChatServer) BroadcastMessage(message string, sender net.Conn) {
+	for client, username := range cs.globalClients {
+		if client != sender {
+			cs.mu.Lock()
+			_, err := client.Write([]byte(message + "\n"))
+			cs.mu.Unlock()
+			if err != nil {
+				log.Println("Error broadcasting message to", username, ":", err.Error())
+			}
+		}
+	}
+}
+
+// HandleConnection handles the connection for each client
+func (cs *ChatServer) HandleConnection(conn net.Conn) {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+
+	var username string
+	for {
+		username, _ = reader.ReadString('\n')
+		username = strings.TrimSpace(username)
+		log.Println(username)
+
+		if _, exists := cs.usernames[username]; exists {
+			conn.Write([]byte("Username already taken. Please enter a different username:\n"))
+		} else {
+			cs.AddClient(conn, username)
+			conn.Write([]byte(fmt.Sprintf("Your username is %s\n", username)))
+			break
+		}
+	}
+
+	mode, err := reader.ReadString('\n')
+	if err != nil {
+		log.Println("Client disconnected.")
+		cs.RemoveClient(conn, username)
+		return
+	}
+
+	mode = strings.TrimSpace(mode)
+	log.Println("User", username, "entered mode:", mode)
+	switch mode {
+	case "global":
+		cs.handleGlobalChat(conn, reader, username)
+	default:
+		conn.Write([]byte("Invalid mode. Type 'global' or 'group'.\n"))
+	}
+}
+
+// handleGlobalChat manages the global chat for the client
+func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader, username string) {
+	coolJoinMessage := fmt.Sprintf("\033[1;36m%s has entered the chat! 🎉\033[0m", username)
+	cs.BroadcastMessage(coolJoinMessage, conn)
+
+	for {
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			log.Println(username, "disconnected")
+			cs.BroadcastMessage(fmt.Sprintf("\033[1;31m%s left the chat!\033[0m", username), conn)
+			cs.RemoveClient(conn, username)
+			return
+		}
+		formattedMessage := fmt.Sprintf("\033[1;32m%s > %s\033[0m", username, strings.TrimSpace(message))
+		cs.BroadcastMessage(formattedMessage, conn)
+	}
+}
 
 func main() {
+	chatServer := NewChatServer()
+
 	listener, err := net.Listen("tcp", ":8000")
 	if err != nil {
 		log.Fatalln("Error opening connection:", err.Error())
@@ -36,75 +126,6 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn)
+		go chatServer.HandleConnection(conn)
 	}
-}
-
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-	reader := bufio.NewReader(conn)
-
-	var username string
-	for {
-		username, _ = reader.ReadString('\n')
-		username = strings.TrimSpace(username)
-
-		if _, exists := usernames[username]; exists {
-			conn.Write([]byte("Username already taken. Please enter a different username\n"))
-		} else {
-			usernames[username] = true
-			conn.Write([]byte(fmt.Sprintf("Your username is %s\n", username)))
-			break
-		}
-	}
-
-	mode, err := reader.ReadString('\n')
-	if err != nil {
-		log.Println("Client disconnected.")
-		return
-	}
-
-	mode = strings.TrimSpace(mode)
-	log.Println("User", username, "entered mode:", mode)
-	switch mode {
-	case "global":
-		handleGlobalChat(conn, reader, username)
-	default:
-		conn.Write([]byte("Invalid mode. Type 'global' or 'group'.\n"))
-	}
-}
-
-func handleGlobalChat(conn net.Conn, reader *bufio.Reader, username string) {
-	globalClients[conn] = username
-
-	coolJoinMessage := fmt.Sprintf(FgCyan + Bold + "%s has entered the chat! 🎉" + Reset, username)
-	broadcastMessage(coolJoinMessage, conn)
-
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			log.Println(username, "disconnected")
-			broadcastMessage(FgCyan+Bold+username+" left the chat!"+Reset, conn)
-			removeClient(conn, username)
-			return
-		}
-		formattedMessage := fmt.Sprintf("%s > %s", username, strings.TrimSpace(message))
-		broadcastMessage(formattedMessage, conn)
-	}
-}
-
-func broadcastMessage(message string, sender net.Conn) {
-	for client, username := range globalClients {
-		if client != sender {
-			_, err := client.Write([]byte(message + "\n"))
-			if err != nil {
-				log.Println("Error broadcasting message to", username, ":", err.Error())
-			}
-		}
-	}
-}
-
-func removeClient(conn net.Conn, username string) {
-	delete(globalClients, conn)
-	delete(usernames, username)
 }
