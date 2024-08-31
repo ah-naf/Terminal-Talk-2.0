@@ -72,8 +72,18 @@ func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader, user
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			log.Println(username, "disconnected")
-			cs.BroadcastMessage(utils.FormatLeaveMessage(username), conn)
+			
+			// Send the leave message to users who haven't blocked this user and whom this user hasn't blocked
+			for client, clientUsername := range cs.globalClients {
+				if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
+					client.Write([]byte(utils.FormatLeaveMessage(username) + "\n"))
+				}
+			}
+
 			cs.RemoveClient(conn, username)
+
+			// Optional: Remove user from block lists if you want blocks to reset upon leaving
+			// cs.clearBlocksForUser(username)
 			return
 		}
 
@@ -82,6 +92,7 @@ func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader, user
 			// Handle command
 			cs.HandleCommand(conn, trimmedMessage[1:])
 		} else {
+			// Normal Chat Message
 			formattedMessage := utils.FormatChatMessage(username, strings.TrimSpace(message))
 			cs.BroadcastMessage(formattedMessage, conn)
 		}
