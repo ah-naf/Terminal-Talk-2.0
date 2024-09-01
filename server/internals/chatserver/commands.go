@@ -24,6 +24,12 @@ func(cs *ChatServer) HandleCommand(conn net.Conn, command string) {
             return
 		}
 		cs.BlockUser(conn, args[1])
+	case "unblock":
+		if len(args) < 2 {
+			conn.Write([]byte(utils.FormatErrorMessage("Usage: /unblock <username>\n")))
+            return
+		}
+		cs.UnblockUser(conn, args[1])
 
 	default:
 		conn.Write([]byte(utils.FormatWarningMessage("Invalid command. Type 'help' for more information.\n")))
@@ -50,7 +56,7 @@ func (cs *ChatServer) BlockUser(conn net.Conn, targetUsername string) {
 	}
 
 	if user == targetUsername {
-		conn.Write([]byte(utils.FormatErrorMessage("You cannot block yourself.\n")))
+		conn.Write([]byte(utils.FormatWarningMessage("You cannot block yourself.\n")))
         return
     }
 
@@ -65,4 +71,35 @@ func (cs *ChatServer) BlockUser(conn net.Conn, targetUsername string) {
 
 	cs.blockedBy[user][targetUsername] = true
 	conn.Write([]byte(utils.FormatSuccessMessage(fmt.Sprintf("User '%s' has been blocked.\n", targetUsername))))
+}
+
+func (cs *ChatServer) UnblockUser(conn net.Conn, targetUsername string) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	user, exists := cs.globalClients[conn]
+	if !exists {
+		conn.Write([]byte(utils.FormatErrorMessage("Internal error: user not found.\n")))
+		return
+	}
+
+	if user == targetUsername {
+		conn.Write([]byte(utils.FormatWarningMessage("You cannot unblock yourself.\n")))
+		return
+	}
+
+	blockedUser, blocked := cs.blockedBy[user]
+	if !blocked {
+		conn.Write([]byte(utils.FormatWarningMessage(fmt.Sprintf("%s is not a blocked user.\n", targetUsername))))
+		return
+	}
+
+	if _, exists := blockedUser[targetUsername]; !exists {
+		conn.Write([]byte(utils.FormatWarningMessage(fmt.Sprintf("%s is not a blocked user.\n", targetUsername))))
+		return
+	}
+
+	// Unblock the user
+	delete(blockedUser, targetUsername)
+	conn.Write([]byte(utils.FormatSuccessMessage(fmt.Sprintf("User '%s' has been unblocked.\n", targetUsername))))
 }
