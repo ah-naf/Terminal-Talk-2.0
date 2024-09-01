@@ -36,6 +36,13 @@ func(cs *ChatServer) HandleCommand(conn net.Conn, command string) {
 		} else {
 			cs.ShowAllUsers(conn)
 		}
+	case "whisper":
+		if len(args) < 3 {
+            conn.Write([]byte(utils.FormatErrorMessage("Usage: /whisper <username> <message>\n")))
+            return
+        }
+        cs.WhisperUser(conn, args[1], strings.Join(args[2:], " "))
+    case "help":
 	default:
 		conn.Write([]byte(utils.FormatWarningMessage("Invalid command. Type 'help' for more information.\n")))
 	}
@@ -144,8 +151,6 @@ func (cs *ChatServer) ShowAllUsers(conn net.Conn) {
 	}
 }
 
-
-
 func (cs *ChatServer) ShowBlockedUsers(conn net.Conn) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
@@ -168,4 +173,37 @@ func (cs *ChatServer) ShowBlockedUsers(conn net.Conn) {
 	}
 
 	conn.Write([]byte(utils.FormatSuccessMessage(blockedList)))
+}
+
+func (cs *ChatServer) WhisperUser(conn net.Conn, targetUser, message string) {
+	cs.mu.Lock()
+    defer cs.mu.Unlock()
+
+    _, exists := cs.usernames[targetUser]
+    if!exists {
+        conn.Write([]byte(utils.FormatErrorMessage(fmt.Sprintf("User '%s' does not exist.\n", targetUser))))
+        return
+    }
+
+    if cs.isBlocked(cs.globalClients[conn], targetUser) || cs.isBlocked(targetUser, cs.globalClients[conn]) {
+        conn.Write([]byte(utils.FormatErrorMessage("You cannot whisper to this user due to their blocking status.\n")))
+        return
+    }
+
+    whisperMessage := fmt.Sprintf("%s%s%s (Whispered): %s%s\n", utils.Italic, utils.FgYellow, cs.globalClients[conn], message, utils.Reset)
+	sent := false
+    for targetClient, name := range cs.globalClients {
+		if name == targetUser {
+            targetClient.Write([]byte(whisperMessage))
+			confirmationMessage := fmt.Sprintf("%sYou whispered to %s: %s%s\n", utils.Italic, targetUser, message, utils.Reset)
+            conn.Write([]byte(confirmationMessage))
+			sent = true
+            break
+        }
+	}
+	if !sent {
+		conn.Write([]byte(utils.FormatErrorMessage(fmt.Sprintf("User '%s' is not currently online.\n", targetUser))))
+        return
+	}
+    
 }

@@ -10,6 +10,7 @@ const (
 	FgRed       = "\033[1;31m" // Bold Red
 	FgGreen     = "\033[1;32m" // Bold Green
 	FgYellow    = "\033[1;33m" // Bold Yellow
+	Italic      = "\033[3m" 
 )
 
 // FormatJoinMessage formats the join message
