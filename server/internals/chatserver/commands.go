@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/ah-naf/chat-cli-server/internals/utils"
 )
 
 // HandleCommand processes commands for user
@@ -18,13 +20,13 @@ func(cs *ChatServer) HandleCommand(conn net.Conn, command string) {
 		conn.Close()
 	case "block":
 		if len(args) < 2 {
-			conn.Write([]byte("Usage: /block <username>\n"))
+			conn.Write([]byte(utils.FormatErrorMessage("Usage: /block <username>\n")))
             return
 		}
 		cs.BlockUser(conn, args[1])
 
 	default:
-		conn.Write([]byte("Invalid command. Type 'help' for more information"))
+		conn.Write([]byte(utils.FormatWarningMessage("Invalid command. Type 'help' for more information.\n")))
 	}
 }
 
@@ -43,23 +45,17 @@ func (cs *ChatServer) BlockUser(conn net.Conn, targetUsername string) {
 
 	user, exists := cs.globalClients[conn]
 	if !exists {
-		conn.Write([]byte("Internal error: user not found.\n"))
+		conn.Write([]byte(utils.FormatErrorMessage("Internal error: user not found.\n")))
 		return
 	}
 
 	if user == targetUsername {
-		conn.Write([]byte("You cannot block yourself.\n"))
+		conn.Write([]byte(utils.FormatErrorMessage("You cannot block yourself.\n")))
         return
     }
 
 	if _, exists := cs.usernames[targetUsername]; !exists {
-		conn.Write([]byte(fmt.Sprintf("User '%s' does not exist.\n", targetUsername)))
-		return
-	}
-
-	// Check if the target user has already blocked the current user
-	if cs.isBlocked(targetUsername, user) {
-		conn.Write([]byte(fmt.Sprintf("User '%s' does not exist.\n", targetUsername)))
+		conn.Write([]byte(utils.FormatErrorMessage(fmt.Sprintf("User '%s' does not exist.\n", targetUsername))))
 		return
 	}
 
@@ -68,5 +64,5 @@ func (cs *ChatServer) BlockUser(conn net.Conn, targetUsername string) {
 	}
 
 	cs.blockedBy[user][targetUsername] = true
-	conn.Write([]byte(fmt.Sprintf("User '%s' has been blocked.\n", targetUsername)))
+	conn.Write([]byte(utils.FormatSuccessMessage(fmt.Sprintf("User '%s' has been blocked.\n", targetUsername))))
 }

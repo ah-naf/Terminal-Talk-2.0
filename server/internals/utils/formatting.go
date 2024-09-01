@@ -9,6 +9,7 @@ const (
 	FgCyan      = "\033[1;36m" // Bold Cyan
 	FgRed       = "\033[1;31m" // Bold Red
 	FgGreen     = "\033[1;32m" // Bold Green
+	FgYellow    = "\033[1;33m" // Bold Yellow
 )
 
 // FormatJoinMessage formats the join message
@@ -24,4 +25,19 @@ func FormatLeaveMessage(username string) string {
 // FormatChatMessage formats the chat message
 func FormatChatMessage(username, message string) string {
 	return fmt.Sprintf("%s%s > %s%s", FgGreen, username, message, Reset)
+}
+
+// FormatSuccessMessage formats a success message
+func FormatSuccessMessage(message string) string {
+	return fmt.Sprintf("%s%s%s%s", Bold, FgGreen, message, Reset)
+}
+
+// FormatErrorMessage formats an error message
+func FormatErrorMessage(message string) string {
+	return fmt.Sprintf("%s%s%s%s", Bold, FgRed, message, Reset)
+}
+
+// FormatWarningMessage formats a warning message
+func FormatWarningMessage(message string) string {
+	return fmt.Sprintf("%s%s%s%s", Bold, FgYellow, message, Reset)
 }

@@ -18,6 +18,7 @@ const (
 	FgGreen     = "\033[32m"
 	FgCyan      = "\033[36m"
 	ClearScreen = "\033[H\033[2J"
+	FgRed       = "\033[1;31m" // Bold Red
 )
 
 func main() {
@@ -58,7 +59,7 @@ func main() {
 		response, _ := bufio.NewReader(conn).ReadString('\n')
 		response = strings.TrimSpace(response) // Trim the response
 		if strings.Contains(response, "Username already taken.") {
-			fmt.Println(FgGreen + response + Reset)
+			fmt.Println(FgRed + "Username already exist. Please enter a new username." + Reset)
 		} else {
 			fmt.Println(ClearScreen) // Clear the screen after successful username entry
 			fmt.Println(FgGreen + "Your username is " + Bold + username + Reset)
@@ -104,9 +105,9 @@ func listenForMessages(conn net.Conn) {
 		}
 
 		// Print the new message
-		fmt.Print(FgGreen + Bold + message + Reset)
+		fmt.Print(message)
 
 		// Print the message prompt again
-		fmt.Printf("%s%s > %s", Bold, username, Reset)
+		fmt.Printf("%s%s%s > %s",Reset, Bold, username, Reset)
 	}
 }
