@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"regexp"
 	"strings"
 
 	"github.com/ah-naf/chat-cli-server/internals/utils"
@@ -52,74 +53,84 @@ func (cs *ChatServer) HandleConnection(conn net.Conn) {
 
 // handleGlobalChat manages the global chat for the client
 func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader) {
-    // Get the username from the client
-    var username string
-    for {
-        conn.Write([]byte("Enter your username: "))
-        usernameInput, err := reader.ReadString('\n')
-        if err != nil {
-            log.Println("Error reading username:", err)
-            return
-        }
-        username = strings.TrimSpace(usernameInput)
+	// Regular expression to allow only alphanumeric usernames
+	validUsername := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 
-        if _, exists := cs.usernames[username]; exists {
-            conn.Write([]byte(utils.FormatErrorMessage("Username already taken. Please enter a different username.\n")))
-        } else {
-            cs.AddClient(conn, username)  // Mutex is handled inside AddClient
-            conn.Write([]byte(utils.FormatSuccessMessage(fmt.Sprintf("Your username is %s\n", username))))
-            break
-        }
-    }
+	// Get the username from the client
+	var username string
+	for {
+		conn.Write([]byte("Enter your username: "))
+		usernameInput, err := reader.ReadString('\n')
+		if err != nil {
+			log.Println("Error reading username:", err)
+			return
+		}
+		username = strings.TrimSpace(usernameInput)
 
-    log.Println("User", username, "has joined the chat")
+		// Validate the username
+		if !validUsername.MatchString(username) {
+			conn.Write([]byte(utils.FormatErrorMessage("Invalid username. Usernames can only contain letters and numbers, without spaces.\n")))
+			continue
+		}
 
-    // Send the join message to users who haven't blocked this user and whom this user hasn't blocked
-    for client, clientUsername := range cs.globalClients {
-        if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
-            _, err := client.Write([]byte(utils.FormatJoinMessage(username) + "\n"))
-            if err != nil {
-                log.Println("Error sending join message to", clientUsername, ":", err)
-            }
-        }
-    }
+		if _, exists := cs.usernames[username]; exists {
+			conn.Write([]byte(utils.FormatErrorMessage("Username already taken. Please enter a different username.\n")))
+		} else {
+			cs.AddClient(conn, username) // Mutex is handled inside AddClient
+			conn.Write([]byte(utils.FormatSuccessMessage(fmt.Sprintf("Your username is %s\n", username))))
+			break
+		}
+	}
 
-    // Keep the connection open to handle incoming messages
-    for {
-        message, err := reader.ReadString('\n')
-        if err != nil {
-            log.Println("Error reading message from", username, ":", err)
-            log.Println(username, "disconnected")
+	log.Println("User", username, "has joined the chat")
 
-            // Send the leave message to users who haven't blocked this user and whom this user hasn't blocked
-            for client, clientUsername := range cs.globalClients {
-                if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
-                    _, err := client.Write([]byte(utils.FormatLeaveMessage(username) + "\n"))
-                    if err != nil {
-                        log.Println("Error sending leave message to", clientUsername, ":", err)
-                    }
-                }
-            }
+	// Send the join message to users who haven't blocked this user and whom this user hasn't blocked
+	for client, clientUsername := range cs.globalClients {
+		if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
+			_, err := client.Write([]byte(utils.FormatJoinMessage(username) + "\n"))
+			if err != nil {
+				log.Println("Error sending join message to", clientUsername, ":", err)
+			}
+		}
+	}
 
-            cs.RemoveClient(conn, username)  // Mutex is handled inside RemoveClient
+	// Keep the connection open to handle incoming messages
+	for {
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			log.Println("Error reading message from", username, ":", err)
+			log.Println(username, "disconnected")
 
-            // Optional: Remove user from block lists if you want blocks to reset upon leaving
-            // cs.clearBlocksForUser(username)
-            return
-        }
+			// Send the leave message to users who haven't blocked this user and whom this user hasn't blocked
+			for client, clientUsername := range cs.globalClients {
+				if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
+					_, err := client.Write([]byte(utils.FormatLeaveMessage(username) + "\n"))
+					if err != nil {
+						log.Println("Error sending leave message to", clientUsername, ":", err)
+					}
+				}
+			}
 
-        trimmedMessage := strings.TrimSpace(message)
-        if strings.HasPrefix(trimmedMessage, "/") {
-            log.Println("Handling command from", username)
-            // Handle command
-            cs.HandleCommand(conn, trimmedMessage[1:])
-        } else {
-            log.Println("Broadcasting message from", username)
-            // Normal Chat Message
-            formattedMessage := utils.FormatChatMessage(username, trimmedMessage)
-            cs.BroadcastMessage(formattedMessage, conn)
-        }
-    }
+			cs.RemoveClient(conn, username) // Mutex is handled inside RemoveClient
+
+			// Optional: Remove user from block lists if you want blocks to reset upon leaving
+			// cs.clearBlocksForUser(username)
+			return
+		}
+
+		trimmedMessage := strings.TrimSpace(message)
+		if strings.HasPrefix(trimmedMessage, "/") {
+			log.Println("Handling command from", username)
+			// Handle command
+			cs.HandleCommand(conn, trimmedMessage[1:])
+		} else {
+			log.Println("Broadcasting message from", username)
+			// Normal Chat Message
+			formattedMessage := utils.FormatChatMessage(username, trimmedMessage)
+			cs.BroadcastMessage(formattedMessage, conn)
+		}
+	}
 }
+
 
 

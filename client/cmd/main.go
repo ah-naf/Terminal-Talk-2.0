@@ -33,7 +33,7 @@ func main() {
 
 	// Display cool welcome message
 	fmt.Println(ClearScreen) // Clear the screen
-	fmt.Println(Bold + FgCyan + "Welcome to the Cool Chat Server!" + Reset)
+	fmt.Println(Bold + FgCyan + "Welcome to the Terminal Talk 2.0 Server!" + Reset)
 
 	conn, err := net.Dial("tcp", "localhost:8000")
 	if err != nil {
@@ -60,6 +60,8 @@ func main() {
 		response = strings.TrimSpace(response) // Trim the response
 		if strings.Contains(response, "Username already taken.") {
 			fmt.Println(FgRed + "Username already exist. Please enter a new username." + Reset)
+		} else if strings.Contains(response, "Invalid username") {
+			fmt.Println(FgRed + "Invalid username. Usernames can only contain letters and numbers, without spaces." + Reset)
 		} else {
 			fmt.Println(ClearScreen) // Clear the screen after successful username entry
 			fmt.Println(FgGreen + "Your username is " + Bold + username + Reset)
