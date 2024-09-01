@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 )
 
 var username string
@@ -55,7 +56,8 @@ func main() {
 
 		// Read server's response
 		response, _ := bufio.NewReader(conn).ReadString('\n')
-		if response == "Username already taken. Please enter a different username\n" {
+		response = strings.TrimSpace(response) // Trim the response
+		if strings.Contains(response, "Username already taken.") {
 			fmt.Println(FgGreen + response + Reset)
 		} else {
 			fmt.Println(ClearScreen) // Clear the screen after successful username entry

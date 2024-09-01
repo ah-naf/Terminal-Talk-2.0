@@ -62,12 +62,10 @@ func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader) {
             return
         }
         username = strings.TrimSpace(usernameInput)
-        log.Println("Received username:", username)
 
         if _, exists := cs.usernames[username]; exists {
             conn.Write([]byte("Username already taken. Please enter a different username.\n"))
         } else {
-            log.Println("Username accepted:", username)
             cs.AddClient(conn, username)  // Mutex is handled inside AddClient
             conn.Write([]byte(fmt.Sprintf("Your username is %s\n", username)))
             break

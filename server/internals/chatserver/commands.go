@@ -47,7 +47,18 @@ func (cs *ChatServer) BlockUser(conn net.Conn, targetUsername string) {
 		return
 	}
 
+	if user == targetUsername {
+		conn.Write([]byte("You cannot block yourself.\n"))
+        return
+    }
+
 	if _, exists := cs.usernames[targetUsername]; !exists {
+		conn.Write([]byte(fmt.Sprintf("User '%s' does not exist.\n", targetUsername)))
+		return
+	}
+
+	// Check if the target user has already blocked the current user
+	if cs.isBlocked(targetUsername, user) {
 		conn.Write([]byte(fmt.Sprintf("User '%s' does not exist.\n", targetUsername)))
 		return
 	}
