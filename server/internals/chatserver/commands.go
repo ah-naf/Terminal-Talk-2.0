@@ -30,7 +30,12 @@ func(cs *ChatServer) HandleCommand(conn net.Conn, command string) {
             return
 		}
 		cs.UnblockUser(conn, args[1])
-
+	case "show":
+		if len(args) >= 2 && args[1] == "block" {
+			cs.ShowBlockedUsers(conn)
+		} else {
+			cs.ShowAllUsers(conn)
+		}
 	default:
 		conn.Write([]byte(utils.FormatWarningMessage("Invalid command. Type 'help' for more information.\n")))
 	}
@@ -102,4 +107,65 @@ func (cs *ChatServer) UnblockUser(conn net.Conn, targetUsername string) {
 	// Unblock the user
 	delete(blockedUser, targetUsername)
 	conn.Write([]byte(utils.FormatSuccessMessage(fmt.Sprintf("User '%s' has been unblocked.\n", targetUsername))))
+}
+
+func (cs *ChatServer) ShowAllUsers(conn net.Conn) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	user, exists := cs.globalClients[conn]
+	if !exists {
+		conn.Write([]byte(utils.FormatErrorMessage("Internal error: user not found.\n")))
+		return
+	}
+
+	if len(cs.globalClients) == 1 {
+		conn.Write([]byte(utils.FormatWarningMessage("No other users are currently online.\n")))
+		return
+	}
+
+	userList := "Online users:\n"
+	for clientConn, username := range cs.globalClients {
+		// Skip the current user
+		if clientConn == conn {
+			continue
+		}
+		// Skip if the user has blocked the current user or is blocked by the current user
+		if cs.isBlocked(username, user) || cs.isBlocked(user, username) {
+			continue
+		}
+		userList += fmt.Sprintf("- %s\n", username)
+	}
+
+	if userList == "Online users:\n" {
+		conn.Write([]byte(utils.FormatWarningMessage("No other users are currently online.\n")))
+	} else {
+		conn.Write([]byte(utils.FormatSuccessMessage(userList)))
+	}
+}
+
+
+
+func (cs *ChatServer) ShowBlockedUsers(conn net.Conn) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	user, exists := cs.globalClients[conn]
+	if !exists {
+		conn.Write([]byte(utils.FormatErrorMessage("Internal error: user not found.\n")))
+		return
+	}
+
+	blockedUsers, blocked := cs.blockedBy[user]
+	if !blocked || len(blockedUsers) == 0 {
+		conn.Write([]byte(utils.FormatWarningMessage("You have not blocked any users.\n")))
+		return
+	}
+
+	blockedList := "Blocked users:\n"
+	for username := range blockedUsers {
+		blockedList += fmt.Sprintf("- %s\n", username)
+	}
+
+	conn.Write([]byte(utils.FormatSuccessMessage(blockedList)))
 }
