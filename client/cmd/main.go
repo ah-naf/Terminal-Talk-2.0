@@ -41,6 +41,9 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
+	// Send chat mode to server
+	conn.Write([]byte(mode + "\n"))
+
 	// Ask for username until a unique one is provided
 	for {
 		fmt.Print(FgCyan + "Enter your username: " + Reset)
@@ -60,9 +63,6 @@ func main() {
 			break
 		}
 	}
-
-	// Send chat mode to server
-	conn.Write([]byte(mode + "\n"))
 
 	// Start listening for messages from the server
 	go listenForMessages(conn)

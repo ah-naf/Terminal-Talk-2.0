@@ -31,70 +31,97 @@ func (cs *ChatServer) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
-	var username string
-	for {
-		username, _ = reader.ReadString('\n')
-		username = strings.TrimSpace(username)
-
-		if _, exists := cs.usernames[username]; exists {
-			conn.Write([]byte("Username already taken. Please enter a different username\n"))
-		} else {
-			cs.AddClient(conn, username)
-			conn.Write([]byte(fmt.Sprintf("Your username is %s\n", username)))
-			break
-		}
-	}
-
+	// Read the mode
 	mode, err := reader.ReadString('\n')
 	if err != nil {
 		log.Println("Client disconnected.")
-		cs.RemoveClient(conn, username)
 		return
 	}
 
 	mode = strings.TrimSpace(mode)
-	log.Println("User", username, "entered mode:", mode)
 
 	switch mode {
 	case "global":
-		cs.handleGlobalChat(conn, reader, username)
+		cs.handleGlobalChat(conn, reader)
+	// Future mode handling can go here
 	default:
 		conn.Write([]byte("Invalid mode. Type 'global' or 'group'.\n"))
 	}
 }
 
+
 // handleGlobalChat manages the global chat for the client
-func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader, username string) {
-	coolJoinMessage := utils.FormatJoinMessage(username)
-	cs.BroadcastMessage(coolJoinMessage, conn)
+func (cs *ChatServer) handleGlobalChat(conn net.Conn, reader *bufio.Reader) {
+    // Get the username from the client
+    var username string
+    for {
+        conn.Write([]byte("Enter your username: "))
+        usernameInput, err := reader.ReadString('\n')
+        if err != nil {
+            log.Println("Error reading username:", err)
+            return
+        }
+        username = strings.TrimSpace(usernameInput)
+        log.Println("Received username:", username)
 
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			log.Println(username, "disconnected")
-			
-			// Send the leave message to users who haven't blocked this user and whom this user hasn't blocked
-			for client, clientUsername := range cs.globalClients {
-				if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
-					client.Write([]byte(utils.FormatLeaveMessage(username) + "\n"))
-				}
-			}
+        if _, exists := cs.usernames[username]; exists {
+            conn.Write([]byte("Username already taken. Please enter a different username.\n"))
+        } else {
+            log.Println("Username accepted:", username)
+            cs.AddClient(conn, username)  // Mutex is handled inside AddClient
+            conn.Write([]byte(fmt.Sprintf("Your username is %s\n", username)))
+            break
+        }
+    }
 
-			cs.RemoveClient(conn, username)
+    log.Println("User", username, "has joined the chat")
 
-			// Optional: Remove user from block lists if you want blocks to reset upon leaving
-			// cs.clearBlocksForUser(username)
-			return
-		}
+    // Send the join message to users who haven't blocked this user and whom this user hasn't blocked
+    for client, clientUsername := range cs.globalClients {
+        if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
+            _, err := client.Write([]byte(utils.FormatJoinMessage(username) + "\n"))
+            if err != nil {
+                log.Println("Error sending join message to", clientUsername, ":", err)
+            }
+        }
+    }
 
-		trimmedMessage := strings.TrimSpace(message)
-		if strings.HasPrefix(trimmedMessage, "/") {
-			// Handle command
-			cs.HandleCommand(conn, trimmedMessage[1:])
-		} else {
-			// Normal Chat Message
-			formattedMessage := utils.FormatChatMessage(username, strings.TrimSpace(message))
-			cs.BroadcastMessage(formattedMessage, conn)
-		}
-	}
+    // Keep the connection open to handle incoming messages
+    for {
+        message, err := reader.ReadString('\n')
+        if err != nil {
+            log.Println("Error reading message from", username, ":", err)
+            log.Println(username, "disconnected")
+
+            // Send the leave message to users who haven't blocked this user and whom this user hasn't blocked
+            for client, clientUsername := range cs.globalClients {
+                if client != conn && !cs.isBlocked(clientUsername, username) && !cs.isBlocked(username, clientUsername) {
+                    _, err := client.Write([]byte(utils.FormatLeaveMessage(username) + "\n"))
+                    if err != nil {
+                        log.Println("Error sending leave message to", clientUsername, ":", err)
+                    }
+                }
+            }
+
+            cs.RemoveClient(conn, username)  // Mutex is handled inside RemoveClient
+
+            // Optional: Remove user from block lists if you want blocks to reset upon leaving
+            // cs.clearBlocksForUser(username)
+            return
+        }
+
+        trimmedMessage := strings.TrimSpace(message)
+        if strings.HasPrefix(trimmedMessage, "/") {
+            log.Println("Handling command from", username)
+            // Handle command
+            cs.HandleCommand(conn, trimmedMessage[1:])
+        } else {
+            log.Println("Broadcasting message from", username)
+            // Normal Chat Message
+            formattedMessage := utils.FormatChatMessage(username, trimmedMessage)
+            cs.BroadcastMessage(formattedMessage, conn)
+        }
+    }
 }
+
+
